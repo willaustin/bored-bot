@@ -1,12 +1,10 @@
-//
-// This is main file containing code implementing the Express server and functionality for the Express echo bot.
-//
 'use strict';
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const request = require('request');
-const path = require('path');
+const Reddit = require('./lib/reddit');
+
 var messengerButton = "<html><head><title>Facebook Messenger Bot</title></head><body><h1>Facebook Messenger Bot</h1>This is a bot based on Messenger Platform QuickStart. For more details, see their <a href=\"https://developers.facebook.com/docs/messenger-platform/guides/quick-start\">docs</a>.<script src=\"https://button.glitch.me/button.js\" data-style=\"glitch\"></script><div class=\"glitchButton\" style=\"position:fixed;top:20px;right:20px;\"></div></body></html>";
 
 // The rest of the code implements the routes for our Express server.
@@ -38,7 +36,7 @@ app.get('/', function(req, res) {
 
 // Message processing
 app.post('/webhook', function (req, res) {
-  console.log(req.body);
+  // console.log(req.body);
   var data = req.body;
 
   // Make sure this is a page subscription
@@ -49,16 +47,20 @@ app.post('/webhook', function (req, res) {
       var pageID = entry.id;
       var timeOfEvent = entry.time;
 
-      // Iterate over each messaging event
-      entry.messaging.forEach(function(event) {
-        if (event.message) {
-          receivedMessage(event);
-        } else if (event.postback) {
-          receivedPostback(event);   
-        } else {
-          console.log("Webhook received unknown event: ", event);
-        }
-      });
+      if (entry.messaging) {
+        // Iterate over each messaging event
+        entry.messaging.forEach(function(event) {
+          if (event.message) {
+            receivedMessage(event);
+          } else if (event.postback) {
+            receivedPostback(event);   
+          } else {
+            console.log("Webhook received unknown event: ", event);
+          }
+        });
+      } else {
+        console.log("Webhook received unknown entry: ", entry);
+      }
     });
 
     // Assume all went well.
@@ -89,11 +91,11 @@ function receivedMessage(event) {
   if (messageText) {
     // If we receive a text message, check to see if it matches a keyword
     // and send back the template example. Otherwise, just echo the text we received.
-    switch (messageText) {
-      case 'generic':
-        sendGenericMessage(senderID);
+    switch (messageText.toLowerCase()) {
+      case 'hit me':
+      case 'another':
+        sendTopPost(senderID, 'mildlyinteresting', true);
         break;
-
       default:
         sendTextMessage(senderID, messageText);
     }
@@ -122,21 +124,28 @@ function receivedPostback(event) {
 //////////////////////////
 // Sending helpers
 //////////////////////////
-function sendTextMessage(recipientId, messageText) {
-  var messageData = {
-    recipient: {
-      id: recipientId
-    },
-    message: {
-      text: messageText
-    }
-  };
+function sendTopPost(recipientId, subreddit, random, index) {
+  let red = new Reddit();
 
-  callSendAPI(messageData);
+  red.getTopPosts(subreddit, random, index)
+    .then((data) => {
+      console.log(data);
+      callSendAPI(prepRichPost(recipientId, data));
+    })
+    .catch((err) => {
+      console.error(err);
+    });
 }
 
-function sendGenericMessage(recipientId) {
-  var messageData = {
+function prepRichPost(recipientId, post) {
+
+  let imgurRegEx = /https?:\/\/imgur\.com/i;
+  let link = `https://reddit.com${post.permalink}`;
+  let url = post.url.match(imgurRegEx) ? post.thumbnail : post.url;
+
+  console.log(url);
+
+  return {
     recipient: {
       id: recipientId
     },
@@ -146,38 +155,35 @@ function sendGenericMessage(recipientId) {
         payload: {
           template_type: "generic",
           elements: [{
-            title: "rift",
-            subtitle: "Next-generation virtual reality",
-            item_url: "https://www.oculus.com/en-us/rift/",               
-            image_url: "http://messengerdemo.parseapp.com/img/rift.png",
+            title: post.title,
+            subtitle: `${post.subreddit_name_prefixed}\nscore: ${post.score}\n`,
+            item_url: link,
+            image_url: url,
             buttons: [{
               type: "web_url",
-              url: "https://www.oculus.com/en-us/rift/",
-              title: "Open Web URL"
-            }, {
-              type: "postback",
-              title: "Call Postback",
-              payload: "Payload for first bubble",
+              url: link,
+              title: "Open Reddit Post"
+            },{
+              type: "web_url",
+              url: url,
+              title: "Open Image"
             }],
-          }, {
-            title: "touch",
-            subtitle: "Your Hands, Now in VR",
-            item_url: "https://www.oculus.com/en-us/touch/",               
-            image_url: "http://messengerdemo.parseapp.com/img/touch.png",
-            buttons: [{
-              type: "web_url",
-              url: "https://www.oculus.com/en-us/touch/",
-              title: "Open Web URL"
-            }, {
-              type: "postback",
-              title: "Call Postback",
-              payload: "Payload for second bubble",
-            }]
           }]
         }
       }
     }
-  };  
+  }; 
+}
+
+function sendTextMessage(recipientId, messageText) {
+  var messageData = {
+    recipient: {
+      id: recipientId
+    },
+    message: {
+      text: messageText
+    }
+  };
 
   callSendAPI(messageData);
 }
