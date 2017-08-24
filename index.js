@@ -2,6 +2,7 @@
 // This is main file containing code implementing the Express server and functionality for the Express echo bot.
 //
 'use strict';
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const request = require('request');
