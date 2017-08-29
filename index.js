@@ -97,7 +97,7 @@ function receivedMessage(event) {
         sendTopPost(senderID, 'mildlyinteresting', true);
         break;
       default:
-console.log(message.nlp);
+        console.log(message.nlp);
         handleIntent(senderID, message.nlp);
         // sendTextMessage(senderID, messageText);
     }
@@ -143,10 +143,11 @@ function handleIntent(senderID, nlp) {
       if (number || ordinal) {
         console.log(`get specific post passing number`);
         getSpecificPost(senderID, nlp, number || ordinal);
+        return;
       }
+      sendTextMessage(senderID, "I'm sorry, but I couldn't figure out what you wanted me to do. Please try again.");
       break;
   }
-  sendTextMessage(senderID, "I'm sorry, but I couldn't figure out what you wanted me to do. Please try again.");
 }
 
 function getNumber(nlp, type='number') {
@@ -185,7 +186,7 @@ function sendTopPost(recipientId, subreddit, random, index) {
 
   red.getTopPosts(subreddit, random, index)
     .then((data) => {
-      console.log(data);
+      // console.log(data);
       callSendAPI(prepRichPost(recipientId, data));
     })
     .catch((err) => {
@@ -199,7 +200,7 @@ function prepRichPost(recipientId, post) {
   let link = `https://reddit.com${post.permalink}`;
   let url = post.url.match(imgurRegEx) ? post.thumbnail : post.url;
 
-  console.log(url);
+  // console.log(url);
 
   return {
     recipient: {
@@ -246,7 +247,7 @@ function sendTextMessage(recipientId, messageText) {
 
 function callSendAPI(messageData) {
   request({
-    uri: 'https://graph.facebook.com/v2.6/me/messages',
+    uri: 'https://graph.facebook.com/v2.10/me/messages',
     headers: {
       'Authorization': `Bearer ${process.env.PAGE_ACCESS_TOKEN}`
     },
