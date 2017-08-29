@@ -97,7 +97,9 @@ function receivedMessage(event) {
         sendTopPost(senderID, 'mildlyinteresting', true);
         break;
       default:
-        sendTextMessage(senderID, messageText);
+console.log(message.nlp);
+        handleIntent(senderID, message.nlp);
+        // sendTextMessage(senderID, messageText);
     }
   } else if (messageAttachments) {
     sendTextMessage(senderID, "Message with attachment received");
@@ -119,6 +121,60 @@ function receivedPostback(event) {
   // When a postback is called, we'll send a message back to the sender to 
   // let them know it was successful
   sendTextMessage(senderID, "Postback called");
+}
+
+function handleIntent(senderID, nlp) {
+  let intent = null;
+  if (nlp && nlp.entities && nlp.entities['intent'] && nlp.entities['intent'][0].confidence > 0.8) {
+    console.log(nlp.entities['intent'][0].value);
+    intent = nlp.entities['intent'][0].value;
+  }
+
+  switch(intent) {
+    case 'get_specific_post':
+      getSpecificPost(senderID, nlp);
+      break;
+    case 'get_random_post':
+      getRandomPost(senderID, nlp);
+      break;
+    default:
+      let number = getNumber(nlp);
+      let ordinal = getNumber(nlp, 'ordinal');
+      if (number || ordinal) {
+        console.log(`get specific post passing number`);
+        getSpecificPost(senderID, nlp, number || ordinal);
+      }
+      break;
+  }
+  sendTextMessage(senderID, "I'm sorry, but I couldn't figure out what you wanted me to do. Please try again.");
+}
+
+function getNumber(nlp, type='number') {
+  if (nlp && nlp.entities && nlp.entities[type] && nlp.entities[type][0].confidence > 0.8) {
+    console.log(`Determined ${type}: ${nlp.entities[type][0].value}`);
+    return nlp.entities[type][0].value;
+  }
+  console.log(`could not determine ${type}`);
+  return null;
+}
+
+function getSpecificPost(senderID, nlp, indexIfKnown=null) {
+  let number;
+  let ordinal;
+  if (!indexIfKnown) {
+    number = getNumber(nlp);
+    ordinal = getNumber(nlp, 'ordinal');
+  }
+
+  if (number || ordinal || indexIfKnown) {
+    sendTopPost(senderID, 'mildlyinteresting', false, number || ordinal || indexIfKnown);
+  } else {
+    sendTextMessage(senderID, "I'm sorry, but I couldn't tell which one you wanted me to show you. Please try again.");
+  }
+}
+
+function getRandomPost(senderID, nlp) {
+  sendTopPost(senderID, 'mildlyinteresting', true);
 }
 
 //////////////////////////
