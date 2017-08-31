@@ -5,10 +5,12 @@ const bodyParser = require('body-parser');
 const request = require('request');
 const Reddit = require('./lib/reddit');
 
-var messengerButton = "<html><head><title>Facebook Messenger Bot</title></head><body><h1>Facebook Messenger Bot</h1>This is a bot based on Messenger Platform QuickStart. For more details, see their <a href=\"https://developers.facebook.com/docs/messenger-platform/guides/quick-start\">docs</a>.<script src=\"https://button.glitch.me/button.js\" data-style=\"glitch\"></script><div class=\"glitchButton\" style=\"position:fixed;top:20px;right:20px;\"></div></body></html>";
+let messengerButton = "<html><head><title>Facebook Messenger Bot</title></head><body><h1>Facebook Messenger Bot</h1>This is a bot based on Messenger Platform QuickStart. For more details, see their <a href=\"https://developers.facebook.com/docs/messenger-platform/guides/quick-start\">docs</a>.<script src=\"https://button.glitch.me/button.js\" data-style=\"glitch\"></script><div class=\"glitchButton\" style=\"position:fixed;top:20px;right:20px;\"></div></body></html>";
 
 // The rest of the code implements the routes for our Express server.
 let app = express();
+let max = 100;
+let min = 1;
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
@@ -16,7 +18,7 @@ app.use(bodyParser.urlencoded({
 }));
 
 // Webhook validation
-app.get('/webhook', function(req, res) {
+app.get('/webhook', (req, res) => {
   if (req.query['hub.mode'] === 'subscribe' &&
       req.query['hub.verify_token'] === process.env.VERIFY_TOKEN) {
     console.log("Validating webhook");
@@ -28,28 +30,28 @@ app.get('/webhook', function(req, res) {
 });
 
 // Display the web page
-app.get('/', function(req, res) {
+app.get('/', (req, res) => {
   res.writeHead(200, {'Content-Type': 'text/html'});
   res.write(messengerButton);
   res.end();
 });
 
 // Message processing
-app.post('/webhook', function (req, res) {
+app.post('/webhook', (req, res) => {
   // console.log(req.body);
-  var data = req.body;
+  let data = req.body;
 
   // Make sure this is a page subscription
   if (data.object === 'page') {
     
     // Iterate over each entry - there may be multiple if batched
-    data.entry.forEach(function(entry) {
-      var pageID = entry.id;
-      var timeOfEvent = entry.time;
+    data.entry.forEach((entry) => {
+      let pageID = entry.id;
+      let timeOfEvent = entry.time;
 
       if (entry.messaging) {
         // Iterate over each messaging event
-        entry.messaging.forEach(function(event) {
+        entry.messaging.forEach((event) => {
           if (event.message) {
             receivedMessage(event);
           } else if (event.postback) {
@@ -74,46 +76,63 @@ app.post('/webhook', function (req, res) {
 
 // Incoming events handling
 function receivedMessage(event) {
-  var senderID = event.sender.id;
-  var recipientID = event.recipient.id;
-  var timeOfMessage = event.timestamp;
-  var message = event.message;
+  let senderID = event.sender.id;
+  let recipientID = event.recipient.id;
+  let timeOfMessage = event.timestamp;
+  let message = event.message;
 
   console.log("Received message for user %d and page %d at %d with message:", 
     senderID, recipientID, timeOfMessage);
   console.log(JSON.stringify(message));
 
-  var messageId = message.mid;
+  let messageId = message.mid;
 
-  var messageText = message.text;
-  var messageAttachments = message.attachments;
+  let messageText = message.text;
+  let messageAttachments = message.attachments;
 
-  if (messageText) {
-    // If we receive a text message, check to see if it matches a keyword
-    // and send back the template example. Otherwise, just echo the text we received.
-    switch (messageText.toLowerCase()) {
-      case 'hit me':
-      case 'another':
-        sendTopPost(senderID, 'mildlyinteresting', true);
+  let quickReply = message.quick_reply;
+
+  if (quickReply) {
+    let payload = quickReply.payload;
+
+    console.log(payload);
+
+    let [type, number] = payload.split(':');
+
+    switch (type) {
+      case 'RANDOM':
+        getRandomPost(senderID);
+        break;
+      case 'SPECIFIC':
+        getSpecificPost(senderID, message.nlp, number);
         break;
       default:
-        console.log(message.nlp);
-        handleIntent(senderID, message.nlp);
-        // sendTextMessage(senderID, messageText);
+        sendTextMessage(senderID, "I'm sorry. I'm still learning, and I couldn't figure out what you wanted me to do. Try 'hit me' or 'show me number 1.'", getHelpQuickReplies());
+        break;
     }
+    return;
+  }
+
+  if (message.nlp && message.nlp.entities && message.nlp.entities['greetings'] && message.nlp.entities['greetings'][0].confidence > 0.7) {
+    handleGreeting(senderID, message.nlp);
+    return;
+  }
+
+  if (messageText) {
+    handleIntent(senderID, message.nlp);
   } else if (messageAttachments) {
-    sendTextMessage(senderID, "Message with attachment received");
+    sendTextMessage(senderID, "That's wonderful, but I can't receive attachments at this time. :-/ Try replying 'random' to get a random post.", getHelpQuickReplies());
   }
 }
 
 function receivedPostback(event) {
-  var senderID = event.sender.id;
-  var recipientID = event.recipient.id;
-  var timeOfPostback = event.timestamp;
+  let senderID = event.sender.id;
+  let recipientID = event.recipient.id;
+  let timeOfPostback = event.timestamp;
 
   // The 'payload' param is a developer-defined field which is set in a postback 
   // button for Structured Messages. 
-  var payload = event.postback.payload;
+  let payload = event.postback.payload;
 
   console.log("Received postback for user %d and page %d with payload '%s' " + 
     "at %d", senderID, recipientID, payload, timeOfPostback);
@@ -121,6 +140,49 @@ function receivedPostback(event) {
   // When a postback is called, we'll send a message back to the sender to 
   // let them know it was successful
   sendTextMessage(senderID, "Postback called");
+}
+
+function getRandomIntInclusive(min, max) {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min + 1)) + min; //The maximum is inclusive and the minimum is inclusive 
+}
+
+function handleGreeting(senderID, nlp) {
+  let greetings = [
+    'Hello. 👋',
+    'Hello.',
+    '👋',
+    'Hey. What\'s up?',
+    'Hey. 👋',
+    'Hey.',
+    'What\'s happening?',
+  ];
+  let moreGreetings = [
+    'Try getting a random post by replying \'random.\'',
+    'You should check out the top post by replying \'first.\'',
+    'Let me find you something interesting. When you\'re ready reply \'hit me,\' or try a quick reply below.'
+  ];
+
+  sendTextMessage(senderID, `${greetings[getRandomIntInclusive(0, greetings.length-1)]} ${moreGreetings[getRandomIntInclusive(0, moreGreetings.length-1)]}`, getHelpQuickReplies());
+}
+
+function getHelpQuickReplies() {
+  let randomNumber = getRandomIntInclusive(min, max);
+
+  return [{
+    content_type: "text",
+    title: "random",
+    payload: "RANDOM"
+  },{
+    content_type: "text",
+    title: "first",
+    payload: "SPECIFIC:1"
+  },{
+    content_type: "text",
+    title: randomNumber,
+    payload: `SPECIFIC:${randomNumber}`
+  }];
 }
 
 function handleIntent(senderID, nlp) {
@@ -135,46 +197,54 @@ function handleIntent(senderID, nlp) {
       getSpecificPost(senderID, nlp);
       break;
     case 'get_random_post':
-      getRandomPost(senderID, nlp);
+      getRandomPost(senderID);
+      break;
+    case 'get_help':
+      sendTextMessage(senderID, `Try replying with 'hit me' for a random post. You can also pick a number between ${min} and ${max}, and I'll grab that one for you.`, getHelpQuickReplies());
       break;
     default:
       let number = getNumber(nlp);
-      let ordinal = getNumber(nlp, 'ordinal');
-      if (number || ordinal) {
-        console.log(`get specific post passing number`);
-        getSpecificPost(senderID, nlp, number || ordinal);
+      if (number !== null) {
+        getSpecificPost(senderID, nlp, number);
         return;
       }
-      sendTextMessage(senderID, "I'm sorry, but I couldn't figure out what you wanted me to do. Please try again.");
+      sendTextMessage(senderID, "Sorry. I'm still learning, and I couldn't figure out what you wanted me to do. Try 'hit me' or 'show me number 1.'", getHelpQuickReplies());
       break;
   }
 }
 
-function getNumber(nlp, type='number') {
-  if (nlp && nlp.entities && nlp.entities[type] && nlp.entities[type][0].confidence > 0.8) {
-    console.log(`Determined ${type}: ${nlp.entities[type][0].value}`);
-    return nlp.entities[type][0].value;
+function getNumber(nlp) {
+  let types = ['ordinal','number'];
+  let number = null;
+
+  if (nlp && nlp.entities) {
+    types.some((type) => {
+      if (nlp.entities[type] && nlp.entities[type][0].confidence > 0.8) {
+        number = nlp.entities[type][0].value;
+        return true;
+      }
+    });
   }
-  console.log(`could not determine ${type}`);
-  return null;
+
+  return number;
 }
 
-function getSpecificPost(senderID, nlp, indexIfKnown=null) {
-  let number;
-  let ordinal;
-  if (!indexIfKnown) {
-    number = getNumber(nlp);
-    ordinal = getNumber(nlp, 'ordinal');
-  }
+function getSpecificPost(senderID, nlp, numberIfKnown=null) {
+  let number = numberIfKnown === null ? getNumber(nlp) : numberIfKnown;
 
-  if (number || ordinal || indexIfKnown) {
-    sendTopPost(senderID, 'mildlyinteresting', false, number || ordinal || indexIfKnown);
+  if (number !== null) {
+    if (number > max) {
+      sendTextMessage(senderID, "Right now I can only grab up to the 100th post. Fetching that one now...");
+    } else if (number < min) {
+      sendTextMessage(senderID, "Trying to trick me? ;-) Grabbing the first post now...");
+    }
+    sendTopPost(senderID, 'mildlyinteresting', false, number);
   } else {
-    sendTextMessage(senderID, "I'm sorry, but I couldn't tell which one you wanted me to show you. Please try again.");
+    sendTextMessage(senderID, "I'm sorry. I'm still learning, and I couldn't tell which one you wanted me to show you. Try 'hit me' or 'show me number 1.'", getHelpQuickReplies());
   }
 }
 
-function getRandomPost(senderID, nlp) {
+function getRandomPost(senderID) {
   sendTopPost(senderID, 'mildlyinteresting', true);
 }
 
@@ -186,7 +256,7 @@ function sendTopPost(recipientId, subreddit, random, index) {
 
   red.getTopPosts(subreddit, random, index)
     .then((data) => {
-      // console.log(data);
+      console.log(data);
       callSendAPI(prepRichPost(recipientId, data));
     })
     .catch((err) => {
@@ -200,9 +270,28 @@ function prepRichPost(recipientId, post) {
   let link = `https://reddit.com${post.permalink}`;
   let url = post.url.match(imgurRegEx) ? post.thumbnail : post.url;
 
-  // console.log(url);
+  let quickReplies = [{
+    content_type: "text",
+    title: "random",
+    payload: "RANDOM"
+  }];
 
-  return {
+  if (post.number < max) {
+    quickReplies.push({
+      content_type: "text",
+      title: "next",
+      payload: `SPECIFIC:${(post.number*1)+1}`
+    });
+  }
+  if (post.number > min) {
+    quickReplies.unshift({
+      content_type: "text",
+      title: "previous",
+      payload: `SPECIFIC:${(post.number*1)-1}`
+    });
+  }
+
+  let messageData = {
     recipient: {
       id: recipientId
     },
@@ -213,7 +302,7 @@ function prepRichPost(recipientId, post) {
           template_type: "generic",
           elements: [{
             title: post.title,
-            subtitle: `${post.subreddit_name_prefixed}\nscore: ${post.score}\n`,
+            subtitle: `${post.subreddit_name_prefixed}\nrank: ${post.number}\nscore: ${post.score}\n`,
             item_url: link,
             image_url: url,
             buttons: [{
@@ -222,18 +311,21 @@ function prepRichPost(recipientId, post) {
               title: "Open Reddit Post"
             },{
               type: "web_url",
-              url: url,
+              url: post.url,
               title: "Open Image"
             }],
           }]
         }
-      }
+      },
+      quick_replies: quickReplies
     }
   }; 
+
+  return messageData;
 }
 
-function sendTextMessage(recipientId, messageText) {
-  var messageData = {
+function sendTextMessage(recipientId, messageText, quickReplies=null) {
+  let messageData = {
     recipient: {
       id: recipientId
     },
@@ -241,6 +333,11 @@ function sendTextMessage(recipientId, messageText) {
       text: messageText
     }
   };
+
+  console.log(quickReplies, typeof quickReplies);
+  if (quickReplies !== null) {
+    messageData.message.quick_replies = quickReplies;
+  }
 
   callSendAPI(messageData);
 }
@@ -254,10 +351,10 @@ function callSendAPI(messageData) {
     method: 'POST',
     json: messageData
 
-  }, function (error, response, body) {
+  }, (error, response, body) => {
     if (!error && response.statusCode == 200) {
-      var recipientId = body.recipient_id;
-      var messageId = body.message_id;
+      let recipientId = body.recipient_id;
+      let messageId = body.message_id;
 
       console.log("Successfully sent generic message with id %s to recipient %s", 
         messageId, recipientId);
@@ -270,6 +367,6 @@ function callSendAPI(messageData) {
 }
 
 // Set Express to listen out for HTTP requests
-var server = app.listen(process.env.PORT || 3000, function () {
+let server = app.listen(process.env.PORT || 3000, () => {
   console.log("Listening on port %s", server.address().port);
 });
