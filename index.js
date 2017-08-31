@@ -114,7 +114,7 @@ function receivedMessage(event) {
   }
 
   if (message.nlp && message.nlp.entities && message.nlp.entities['greetings'] && message.nlp.entities['greetings'][0].confidence > 0.7) {
-    handleGreeting(senderID, message.nlp);
+    handleGreeting(senderID);
     return;
   }
 
@@ -137,9 +137,8 @@ function receivedPostback(event) {
   console.log("Received postback for user %d and page %d with payload '%s' " + 
     "at %d", senderID, recipientID, payload, timeOfPostback);
 
-  // When a postback is called, we'll send a message back to the sender to 
-  // let them know it was successful
-  sendTextMessage(senderID, "Postback called");
+  // For now the only postback we receive is from an initial Get Started click.
+  handleGreeting(senderID);
 }
 
 function getRandomIntInclusive(min, max) {
@@ -148,7 +147,7 @@ function getRandomIntInclusive(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min; //The maximum is inclusive and the minimum is inclusive 
 }
 
-function handleGreeting(senderID, nlp) {
+function handleGreeting(senderID) {
   let greetings = [
     'Hello. 👋',
     'Hello.',
